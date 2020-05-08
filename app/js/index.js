@@ -9,7 +9,10 @@
 
 "use strict";
 
-const SerialPort = require("serialport");
+
+
+// npm modules
+import SerialPort from "serialport";
 
 
 
@@ -18,7 +21,7 @@ SerialPort.list().then(function(ports) {
     if(ports.length > 0) {
         console.log("Found device on port(s):");
         for(let p of ports) {
-            console.log(p.path+" "+p.vendorId+" "+p.productId);
+            console.log(p.path+" "+p.manufacturer+" "+p.vendorId+" "+p.productId);
         }
     } else {
         console.log("No devices detected.");
