@@ -10,7 +10,7 @@
     },
     "type": "module",
     "bin": {
-        "skytraq-logger": "app/js/index.js"
+        "skytraq": "app/js/index.js"
     },
     "dependencies": {
         "commander": "^5.1.0",
