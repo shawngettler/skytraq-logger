@@ -34,15 +34,101 @@ export default class Skytraq {
 
 
     /**
+     * Create new logger device.
      *
+     * @param writeCallback callback to promise function which writes to the serial port
      */
-    constructor() {
+    constructor(writeCallback) {
+        this.write = writeCallback;
+
+        this.dataBuffer = new Uint8Array();
+
+
+        // utility method for finding multi-byte sequences in the buffer
+        Uint8Array.prototype.indexOfArray = function(searchArray, fromIndex) {
+            fromIndex = fromIndex || 0;
+            if(fromIndex + searchArray.length > this.length)
+                return -1;
+            for(let i = 0; i < searchArray.length; i++)
+                if(this[fromIndex + i] != searchArray[i])
+                    return this.indexOfArray(searchArray, fromIndex + 1);
+            return fromIndex;
+        };
+
     }
 
 
+    /**
+     * Append new data to the end of the buffer.
+     *
+     * @param data byte array
+     */
+    appendData(data) {
+        let currentBuffer = this.dataBuffer.slice();
+        this.dataBuffer = new Uint8Array(currentBuffer.length + data.length);
+        this.dataBuffer.set(currentBuffer, 0);
+        this.dataBuffer.set(data, currentBuffer.length);
+    }
 
     /**
-     * Create Skytraq binary message.
+     * Remove data from the beginning of the buffer.
+     *
+     * @param removeCount number of bytes to remove
+     *
+     * @return byte array
+     */
+    removeData(removeCount) {
+        let d = this.dataBuffer.slice(0, removeCount);
+        this.dataBuffer = this.dataBuffer.slice(removeCount);
+        return d;
+    }
+
+
+    /**
+     * Read a specified number of bytes from the buffer.
+     *
+     * @param readCount number of bytes to read
+     *
+     * @return promise which resolves with a data byte array
+     */
+    readData(readCount) {
+        return new Promise((resolve, reject) => {
+            let read = function() {
+                if(this.dataBuffer.length < readCount)
+                    setTimeout(read, 100);
+                else
+                    resolve(this.removeData(readCount));
+            }.bind(this);
+            read();
+        });
+    }
+
+    /**
+     * Read the next binary message from the buffer.
+     *
+     * @return promise which resolves with a binary message byte array
+     */
+    readMessage() {
+        return new Promise((resolve, reject) => {
+            let read = function() {
+                let endIndex = this.dataBuffer.indexOfArray(Skytraq.MSG_END);
+                if(endIndex == -1) {
+                    setTimeout(read, 100);
+                } else {
+                    let m = this.removeData(endIndex + 2);
+                    if(m.indexOfArray(Skytraq.MSG_START) == 0)
+                        resolve(m);
+                    else
+                        read();
+                }
+            }.bind(this);
+            read();
+        });
+    }
+
+
+    /**
+     * Encode Skytraq binary message.
      *
      * @param msg message data object
      * @param msg.id message id byte array
@@ -50,7 +136,7 @@ export default class Skytraq {
      *
      * @return binary message byte array
      */
-    static createMessage(msg) {
+    static encodeMessage(msg) {
         let plLen = 1 + msg.body.length;
         let plChk = msg.id;
         for(let b of msg.body)
@@ -67,14 +153,14 @@ export default class Skytraq {
     }
 
     /**
-     * Read a Skytraq binary message. Returned object has an additional
+     * Decode a Skytraq binary message. Returned object has an additional
      * "check" parameter indicating whether the message checksum matches.
      *
      * @param m binary message byte array
      *
      * @return message data object (see createMessage for parameters)
      */
-    static readMessage(m) {
+    static decodeMessage(m) {
         let plLen = (m[2] << 8) + m[3];
         let msg = { id: m[4], body: m.slice(5, 5 + plLen - 1) };
 
