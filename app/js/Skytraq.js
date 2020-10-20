@@ -128,6 +128,88 @@ export default class Skytraq {
 
 
     /**
+     * Query the device.
+     *
+     * @param query binary message query
+     *
+     * @return promise which resolves if the device returns the correct ack
+     */
+    getQuery(query) {
+        return new Promise((resolve, reject) => {
+            this.write(Skytraq.encodeMessage(query))
+                .then(() => { return this.readMessage(); })
+                .then((m) => {
+                    let msg = Skytraq.decodeMessage(m);
+                    if(msg.id == Skytraq.MSG_ACK && msg.body[0] == 0)
+                        return this.readMessage();
+                })
+                .then((m) => {
+                    let msg = Skytraq.decodeMessage(m);
+                    if(msg.id == Skytraq.MSG_ACK && msg.body[0] == query.id)
+                        resolve();
+                })
+                .catch(reject);
+        });
+    }
+
+    /**
+     * Request the device software version.
+     *
+     * @return promise which resolves with a binary message
+     */
+    getSoftwareVersion() {
+        return new Promise((resolve, reject) => {
+            this.getQuery({
+                id: Skytraq.MSG_GETVERSION,
+                body: new Uint8Array()
+            })
+                .then(() => { return this.readMessage(); })
+                .then((m) => {
+                    let msg = Skytraq.decodeMessage(m);
+                    resolve({
+                        kernelVersion: msg.body[2]+"."+msg.body[3]+"."+msg.body[4],
+                        odmVersion: msg.body[6]+"."+msg.body[7]+"."+msg.body[8],
+                        revision: msg.body[10]+"/"+msg.body[11]+"/"+msg.body[12]
+                    });
+                })
+                .catch(reject)
+        });
+    }
+
+    /**
+     * Request the logger status of the device.
+     *
+     * @return promise which resolves with a binary message
+     */
+    getLoggerStatus() {
+        return new Promise((resolve, reject) => {
+            this.getQuery({
+                id: Skytraq.MSG_LOG_GETSTATUS,
+                body: new Uint8Array()
+            })
+                .then(() => { return this.readMessage(); })
+                .then((m) => {
+                    let msg = Skytraq.decodeMessage(m);
+                    resolve({
+                        position: msg.body[0] | (msg.body[1] << 8) | (msg.body[2] << 16) | (msg.body[3] << 24),
+                        secLeft: msg.body[4] | (msg.body[5] << 8),
+                        secTotal: msg.body[6] | (msg.body[7] << 8),
+                        maxTime: msg.body[8] | (msg.body[9] << 8) | (msg.body[10] << 16) | (msg.body[11] << 24),
+                        minTime: msg.body[12] | (msg.body[13] << 8) | (msg.body[14] << 16) | (msg.body[15] << 24),
+                        maxDist: msg.body[16] | (msg.body[17] << 8) | (msg.body[18] << 16) | (msg.body[19] << 24),
+                        minDist: msg.body[20] | (msg.body[21] << 8) | (msg.body[22] << 16) | (msg.body[23] << 24),
+                        maxSpeed: msg.body[24] | (msg.body[25] << 8) | (msg.body[26] << 16) | (msg.body[27] << 24),
+                        minSpeed: msg.body[28] | (msg.body[29] << 8) | (msg.body[30] << 16) | (msg.body[31] << 24),
+                        datalog: msg.body[32] == 1,
+                        fifomode: msg.body[33] == 1
+                    });
+                })
+                .catch(reject);
+        });
+    }
+
+
+    /**
      * Encode Skytraq binary message.
      *
      * @param msg message data object
