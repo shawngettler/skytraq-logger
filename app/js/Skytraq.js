@@ -210,6 +210,30 @@ export default class Skytraq {
 
 
     /**
+     * Download logger data.
+     *
+     * @param secStart starting sector
+     * @param secCount number of sectors to read
+     *
+     * @return promise which resolves with data
+     */
+    getLoggerData(secStart, secCount) {
+        return new Promise((resolve, reject) => {
+            this.getQuery({
+                id: Skytraq.MSG_LOG_GETDATA,
+                body: new Uint8Array([(secStart >> 8) & 0xff, secStart & 0xff, (secCount >> 8) & 0xff, secCount & 0xff])
+            })
+                .then(() => { return this.readData(secCount * 4096 + 19); })
+                .then((d) => {
+                    let data = d.slice(0, secCount * 4096);
+                    resolve(data);
+                })
+                .catch(reject);
+        });
+    }
+
+
+    /**
      * Encode Skytraq binary message.
      *
      * @param msg message data object
