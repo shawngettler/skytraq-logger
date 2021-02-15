@@ -24,6 +24,9 @@ import Commander from "commander";
  */
 const command = new Commander.Command();
 command.option("-l, --list-devices", "list serial devices");
+command.option("--status", "display logger status");
+command.option("--binary <file>", "save logger data in Skytraq binary format");
+command.option("--geojson <file>", "save logger data in GeoJSON format");
 command.arguments("[port]");
 command.action((port) => { command.port = port; });
 command.parse(process.argv);
@@ -52,12 +55,12 @@ if(command.listDevices) {
  * Connect to the device and run utility.
  */
 if(command.port) {
-    console.log("Connecting to device on port "+command.port);
     const serial = new SerialPort(command.port, { autoOpen: false });
     serial.on("error", (err) => { console.log(err); });
 
     // wrap serianport in promises
     const serialOpen = () => {
+        console.log("Connecting to device on port "+command.port);
         return new Promise((resolve, reject) => {
             serial.open(resolve);
         });
@@ -75,11 +78,22 @@ if(command.port) {
 
     // run
     serialOpen()
-        .then(() => { return skytraq.getSoftwareVersion(); })
+        .then(() => skytraq.getSoftwareVersion())
         .then((m) => {
             console.log("Connected to device running software version " + m.kernelVersion);
         })
-        .then(() => { serial.close(); })
+        .then(() => skytraq.getLoggerStatus())
+        .then((m) => {
+            if(command.status) {
+                console.log("Logger status:");
+                console.log("  "+(m.secTotal-m.secLeft)*4+"kB used of "+m.secTotal*4+"kB available");
+                if(m.minTime > 0)
+                    console.log("  time interval "+m.minTime+"s");
+                if(m.minDist > 0)
+                    console.log("  distance interval "+m.minDist+"m");
+            }
+        })
+        .then(() => serial.close())
         .catch(console.log);
 
 }
