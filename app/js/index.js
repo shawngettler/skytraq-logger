@@ -11,6 +11,8 @@
 
 
 
+import Skytraq from "./Skytraq.js";
+
 // npm modules
 import SerialPort from "serialport";
 import Commander from "commander";
@@ -66,5 +68,18 @@ if(command.port) {
             serial.drain(resolve);
         });
     };
+
+    // device
+    const skytraq = new Skytraq(serialWrite);
+    serial.on("data", (data) => { skytraq.appendData(data); });
+
+    // run
+    serialOpen()
+        .then(() => { return skytraq.getSoftwareVersion(); })
+        .then((m) => {
+            console.log("Connected to device running software version " + m.kernelVersion);
+        })
+        .then(() => { serial.close(); })
+        .catch(console.log);
 
 }
