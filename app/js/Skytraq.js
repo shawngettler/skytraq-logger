@@ -31,6 +31,12 @@ export default class Skytraq {
 
     static MSG_LOG_STATUS = new Uint8Array([0x94]);
 
+    // logger data header
+    static HDR_EMPTY = new Uint8Array([0x07]);
+    static HDR_FULL = new Uint8Array([0x02]);
+    static HDR_COMPACT = new Uint8Array([0x04]);
+    static HDR_POI = new Uint8Array([0x03]);
+
 
 
     /**
@@ -215,7 +221,7 @@ export default class Skytraq {
      * @param secStart starting sector
      * @param secCount number of sectors to read
      *
-     * @return promise which resolves with data
+     * @return promise which resolves with data byte array
      */
     getLoggerData(secStart, secCount) {
         return new Promise((resolve, reject) => {
@@ -264,7 +270,7 @@ export default class Skytraq {
      *
      * @param m binary message byte array
      *
-     * @return message data object (see createMessage for parameters)
+     * @return message data object (see encodeMessage for parameters)
      */
     static decodeMessage(m) {
         let plLen = (m[2] << 8) + m[3];
@@ -276,6 +282,56 @@ export default class Skytraq {
 
         msg.check = m[5 + msg.body.length] == plChk;
         return msg;
+    }
+
+
+    /**
+     * Decode Skytraq position fix information from logger binary data.
+     *
+     * @param data data byte array
+     *
+     * @return array of ECEF position objects
+     */
+    static decodeBinaryData(data) {
+        // weird 10-bit signed int conversion
+        const getInt10 = (b) => { return b & 0x200 ? 0x1ff - b : b; };
+
+        let points = [];
+        let curPos = 0;
+        do {
+            let h = data[curPos] >> 5;
+            if(h == Skytraq.HDR_FULL || h == Skytraq.HDR_POI) {
+                let d = data.slice(curPos, curPos + 18);
+                points.push({
+                    poi: h == Skytraq.HDR_POI,
+                    velocity: ((d[0] & 0x03) << 8) | d[1],
+                    gpsWeek: ((d[2] & 0x03) << 8) | d[3],
+                    gpsTime: (d[2] >> 4) | (d[4] << 12) | (d[5] << 4),
+                    // js automatically makes these signed 32-bit ints
+                    x: (d[6] << 8 ) | d[7] | (d[8] << 24) | (d[9] << 16),
+                    y: (d[10] << 8 ) | d[11] | (d[12] << 24) | (d[13] << 16),
+                    z: (d[14] << 8 ) | d[15] | (d[16] << 24) | (d[17] << 16)
+                });
+                curPos += 18;
+            } else if(h == Skytraq.HDR_COMPACT) {
+                let d = data.slice(curPos, curPos + 8);
+                let p = points[points.length - 1];
+                points.push({
+                    poi: false,
+                    velocity: ((d[0] & 0x03) << 8) | d[1],
+                    gpsWeek: p.gpsWeek,
+                    gpsTime: p.gpsTime + ((d[2] << 8) | d[3]),
+                    x: p.x + getInt10((d[4] << 2) | (d[5] >> 6)),
+                    y: p.y + getInt10((d[5] & 0x3f) | ((d[6] & 0xf0) << 6)),
+                    z: p.z + getInt10(((d[6] & 0x03) << 8) | d[7])
+                });
+                curPos += 8;
+            } else if(h == Skytraq.HDR_EMPTY) {
+                curPos += 2;
+            }
+        } while(curPos < data.length);
+
+        return points;
     }
 
 }
